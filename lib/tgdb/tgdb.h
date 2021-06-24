@@ -44,6 +44,10 @@
         TGDB_TBREAKPOINT_ADD,
         // Delete a breakpoint
         TGDB_BREAKPOINT_DELETE,
+        // Enable a breakpoint
+        TGDB_BREAKPOINT_ENABLE,
+        // Disable a breakpoint
+        TGDB_BREAKPOINT_DISABLE,
     };
 
     // This structure represents a breakpoint
@@ -62,6 +66,9 @@
 
         //0 if it is not enabled or 1 if it is enabled
         int enabled;
+
+        // focus64
+        char *number; // break_number
     };
 
     // This structure currently represents a file position.
@@ -463,7 +470,7 @@
    * Will return as a tgdb request command on success, otherwise NULL.
    */
     void tgdb_request_modify_breakpoint(struct tgdb *tgdb,
-        const char *file, int line, uint64_t addr,
+        const char *number, const char *file, int line, uint64_t addr,
         enum tgdb_breakpoint_action b);
 
     

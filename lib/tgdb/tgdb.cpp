@@ -145,6 +145,8 @@ struct tgdb_request {
         } debugger_command;
 
         struct {
+            // The breakpoint number
+            const char *break_number;
             // The filename to set the breakpoint in
             const char *file;
             // The corresponding line number
@@ -222,6 +224,7 @@ static void tgdb_commands_process_breakpoint(
         }
 
         tb.enabled = breakpoint->enabled;
+        tb.number = breakpoint->number ? cgdb_strdup(breakpoint->number) : NULL; // focus64
         sbpush(breakpoints, tb);
     }
 }
@@ -721,6 +724,8 @@ static void tgdb_request_destroy(tgdb_request_ptr request_ptr)
         case TGDB_REQUEST_DEBUGGER_COMMAND:
             break;
         case TGDB_REQUEST_MODIFY_BREAKPOINT:
+            free((char *) request_ptr->choice.modify_breakpoint.break_number);
+            request_ptr->choice.modify_breakpoint.break_number = NULL;
             free((char *) request_ptr->choice.modify_breakpoint.file);
             request_ptr->choice.modify_breakpoint.file = NULL;
             break;
@@ -856,7 +861,7 @@ static const char *tgdb_get_client_command(struct tgdb *tgdb,
 }
 
 static char *tgdb_client_modify_breakpoint_call(struct tgdb *tgdb,
-    const char *file, int line, uint64_t addr, enum tgdb_breakpoint_action b)
+    const char *number, const char *file, int line, uint64_t addr, enum tgdb_breakpoint_action b)
 {
     const char *action;
 
@@ -865,17 +870,30 @@ static char *tgdb_client_modify_breakpoint_call(struct tgdb *tgdb,
     default:
     case TGDB_BREAKPOINT_ADD:
         action = "break";
+        if (file)
+            return sys_aprintf("%s \"%s\":%d", action, file, line);
         break;
     case TGDB_BREAKPOINT_DELETE:
         action ="clear";
+        if (file)
+            return sys_aprintf("%s \"%s\":%d", action, file, line);
         break;
     case TGDB_TBREAKPOINT_ADD:
         action = "tbreak";
+        if (file)
+            return sys_aprintf("%s \"%s\":%d", action, file, line);
+        break;
+    case TGDB_BREAKPOINT_ENABLE:
+        action = "enable";
+        if (file)
+            return sys_aprintf("%s %s", action, number);
+        break;
+    case TGDB_BREAKPOINT_DISABLE:
+        action = "disable";
+        if (file)
+            return sys_aprintf("%s %s", action, number);
         break;
     }
-
-    if (file)
-        return sys_aprintf("%s \"%s\":%d", action, file, line);
 
     return sys_aprintf("%s *0x%" PRIx64, action, addr);
 }
@@ -1286,10 +1304,13 @@ tgdb_request_run_debugger_command(struct tgdb * tgdb, enum tgdb_command_type c)
     request_ptr->choice.debugger_command.c = c;
 
     tgdb_run_or_queue_request(tgdb, request_ptr, false);
+
+    // focus64
+    tgdb->is_gdb_ready_for_next_command = 1;
 }
 
 void
-tgdb_request_modify_breakpoint(struct tgdb *tgdb, const char *file, int line,
+tgdb_request_modify_breakpoint(struct tgdb *tgdb, const char *number, const char *file, int line,
     uint64_t addr, enum tgdb_breakpoint_action b)
 {
     tgdb_request_ptr request_ptr;
@@ -1297,6 +1318,7 @@ tgdb_request_modify_breakpoint(struct tgdb *tgdb, const char *file, int line,
     request_ptr = (tgdb_request_ptr)cgdb_malloc(sizeof (struct tgdb_request));
 
     request_ptr->header = TGDB_REQUEST_MODIFY_BREAKPOINT;
+    request_ptr->choice.modify_breakpoint.break_number = number ? cgdb_strdup(number) : NULL;
     request_ptr->choice.modify_breakpoint.file = file ? cgdb_strdup(file) : NULL;
     request_ptr->choice.modify_breakpoint.line = line;
     request_ptr->choice.modify_breakpoint.addr = addr;
@@ -1374,6 +1396,7 @@ int tgdb_get_gdb_command(struct tgdb *tgdb, tgdb_request_ptr request,
             break;
         case TGDB_REQUEST_MODIFY_BREAKPOINT:
             str = tgdb_client_modify_breakpoint_call(tgdb,
+                    request->choice.modify_breakpoint.break_number,
                     request->choice.modify_breakpoint.file,
                     request->choice.modify_breakpoint.line,
                     request->choice.modify_breakpoint.addr,

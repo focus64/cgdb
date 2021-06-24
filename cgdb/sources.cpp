@@ -480,7 +480,9 @@ int source_highlight(struct list_node *node)
         int count = sbcount(node->file_buf.lines);
         sbsetcount(node->lflags, count);
 
-        memset(node->lflags, 0, sbcount(node->lflags));
+        // focus64
+        //memset(node->lflags, 0, sbcount(node->lflags));
+        memset(node->lflags, 0, sizeof(*node->lflags)*sbcount(node->lflags));
     }
 
     if (node->file_buf.lines)
@@ -609,6 +611,10 @@ int source_del(struct sviewer *sview, const char *path)
     free(cur->path);
     cur->path = NULL;
 
+    for (i = 0; i < sbcount(cur->lflags); i++) {
+        free( cur->lflags[i].break_number );
+        cur->lflags[i].break_number = NULL;
+    }
     sbfree(cur->lflags);
     cur->lflags = NULL;
 
@@ -1328,8 +1334,11 @@ static void source_clear_breaks(struct sviewer *sview)
     for (node = sview->list_head; node != NULL; node = node->next)
     {
         int i;
-        for (i = 0; i < sbcount(node->lflags); i++)
+        for (i = 0; i < sbcount(node->lflags); i++) {
             node->lflags[i].breakpt = 0;
+            free(node->lflags[i].break_number);
+            node->lflags[i].break_number = NULL;
+        }
     }
 }
 
@@ -1349,6 +1358,8 @@ void source_set_breakpoints(struct sviewer *sview,
                 int enabled = breakpoints[i].enabled;
                 if (line > 0 && line <= sbcount(node->lflags)) {
                     node->lflags[line - 1].breakpt = enabled ? 1 : 2;
+                    char *number= breakpoints[i].number;
+                    node->lflags[line - 1].break_number = number ? cgdb_strdup( number) : NULL;
                 }
             }
         } else if (breakpoints[i].addr) {
@@ -1356,6 +1367,8 @@ void source_set_breakpoints(struct sviewer *sview,
             node = source_get_asmnode(sview, breakpoints[i].addr, &line);
             if (node) {
                 node->lflags[line].breakpt = breakpoints[i].enabled ? 1 : 2;
+                char *number= breakpoints[i].number;
+                node->lflags[line].break_number = number ? cgdb_strdup( number) : NULL;
             }
         }
     }

@@ -82,6 +82,7 @@ struct buffer {
 };
 
 struct line_flags {
+    char *break_number; //focus64
     unsigned char breakpt : 2;
     unsigned char has_mark : 1;
 };

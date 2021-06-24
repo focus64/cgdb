@@ -868,38 +868,47 @@ static int gdb_input(int key, int *last_key)
                 break;
             case CGDB_KEY_CTRL_U:
                 scr_up(gdb_scroller, get_gdb_height() / 2);
+                gdb_scroller->scrolling = 1;
                 break;
             case CGDB_KEY_PPAGE:
                 scr_up(gdb_scroller, get_gdb_height() - 1);
+                gdb_scroller->scrolling = 1;
                 break;
             case CGDB_KEY_CTRL_D:
                 scr_down(gdb_scroller, get_gdb_height() / 2);
+                gdb_scroller->scrolling = 1;
                 break;
             case CGDB_KEY_NPAGE:
                 scr_down(gdb_scroller, get_gdb_height() - 1);
+                gdb_scroller->scrolling = 1;
                 break;
             case CGDB_KEY_HOME:
             case CGDB_KEY_F11:
                 scr_home(gdb_scroller);
+                gdb_scroller->scrolling = 1;
                 break;
             case 'G':
             case CGDB_KEY_END:
             case CGDB_KEY_F12:
                 scr_end(gdb_scroller);
+                gdb_scroller->scrolling = 1;
                 break;
             case 'k':
             case CGDB_KEY_UP:
             case CGDB_KEY_CTRL_P:
                 scr_up(gdb_scroller, 1);
+                gdb_scroller->scrolling = 1;
                 break;
             case 'j':
             case CGDB_KEY_DOWN:
             case CGDB_KEY_CTRL_N:
                 scr_down(gdb_scroller, 1);
+                gdb_scroller->scrolling = 1;
                 break;
             case 'g':
                 if (last_key_pressed == 'g') {
                     scr_home(gdb_scroller);
+                    gdb_scroller->scrolling = 1;
                 }
                 break;
             case 'q':
@@ -909,6 +918,9 @@ static int gdb_input(int key, int *last_key)
             case CGDB_KEY_CTRL_M:
                 scr_end(gdb_scroller);
                 gdb_scroller->in_scroll_mode = 0;
+                // focus64
+                hl_regex_free(&gdb_scroller->last_hlregex);
+		gdb_scroller->last_hlregex = NULL;
                 break;
             case 'n':
                 scr_search_regex(gdb_scroller, regex_last.c_str(), 2,
@@ -927,6 +939,10 @@ static int gdb_input(int key, int *last_key)
 
                 sbc_kind = SBC_REGEX;
 
+                // focus64
+                hl_regex_free(&gdb_scroller->last_hlregex);
+		gdb_scroller->last_hlregex = NULL;
+
                 scr_search_regex_init(gdb_scroller);
                 break;
         }
@@ -943,7 +959,9 @@ static int gdb_input(int key, int *last_key)
                  * Ctrl-l. That way readline will handle it. Because
                  * readline uses TERM=dumb, that means that it will clear
                  * a single line and put out the prompt. */
-                result = 1;
+                //result = 1;
+		// focus64
+                result = 2;
                 break;
             default:
                 /* This tells the input to go to active GDB command */
@@ -1126,10 +1144,38 @@ toggle_breakpoint(struct sviewer *sview, enum tgdb_breakpoint_action t)
     }
 
     /* delete an existing breakpoint */
-    if (sview->cur->lflags[line].breakpt)
-        t = TGDB_BREAKPOINT_DELETE;
+    //if (sview->cur->lflags[line].breakpt)
+    //    t = TGDB_BREAKPOINT_DELETE;
+    //tgdb_request_modify_breakpoint(tgdb, path, line + 1, addr, t);
 
-    tgdb_request_modify_breakpoint(tgdb, path, line + 1, addr, t);
+    // focus64
+    char *break_number = sview->cur->lflags[line].break_number; 
+
+    switch (t) {
+    case TGDB_BREAKPOINT_ADD:
+    case TGDB_BREAKPOINT_DELETE:
+        /* delete a existing breakpoint */
+        if (sview->cur->lflags[line].breakpt)
+            t = TGDB_BREAKPOINT_DELETE;
+        tgdb_request_modify_breakpoint(tgdb, break_number, path, line + 1, addr, t);
+        break;
+    case TGDB_TBREAKPOINT_ADD:
+        tgdb_request_modify_breakpoint(tgdb, break_number, path, line + 1, addr, t);
+        break;
+    case TGDB_BREAKPOINT_ENABLE:
+    case TGDB_BREAKPOINT_DISABLE:
+        if (sview->cur->lflags[line].breakpt) {
+            if ( 1 == sview->cur->lflags[line].breakpt )
+                t = TGDB_BREAKPOINT_DISABLE;
+            else if ( 2 == sview->cur->lflags[line].breakpt ) 
+                t = TGDB_BREAKPOINT_ENABLE;
+            tgdb_request_modify_breakpoint(tgdb, break_number, path, line + 1, addr, t);
+        }
+        break;
+    default: break;
+    }
+
+
     return 0;
 }
 
@@ -1215,6 +1261,13 @@ static void source_input(struct sviewer *sview, int key)
         case ' ':
         {
             enum tgdb_breakpoint_action t = TGDB_BREAKPOINT_ADD;
+
+            toggle_breakpoint(sview, t);
+        }
+            break;
+        case '!':
+        {
+            enum tgdb_breakpoint_action t = TGDB_BREAKPOINT_ENABLE;
 
             toggle_breakpoint(sview, t);
         }
@@ -1375,6 +1428,10 @@ static int cgdb_input(int key, int *last_key)
 
                 sbc_kind = SBC_REGEX;
                 if_set_focus(CGDB_STATUS_BAR);
+
+                // focus64
+                hl_regex_free(&src_viewer->last_hlregex);
+                src_viewer->last_hlregex = NULL;
 
                 /* Capturing regular expressions */
                 source_search_regex_init(src_viewer);

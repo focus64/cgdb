@@ -71,6 +71,10 @@ struct scroller {
     int search_r;
     SWINDOW *win; /* The scoller's own window */
 
+    // focus64
+    int anchor;
+    int scrolling;
+
     scroller_mark marks[MARK_COUNT]; /* Local a-z marks */
     scroller_mark jump_back_mark;    /* Location where last jump occurred from */
 };

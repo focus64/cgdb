@@ -37,6 +37,7 @@
 /* --------------- */
 /* Local Functions */
 /* --------------- */
+static int number_rows_to_display(struct scroller *scr, int height, int width);
 
 /* count: Count the occurrences of a character c in a string s.
  * ------
@@ -161,10 +162,11 @@ static char *parse(struct scroller *scr, struct hl_line_attr **attrs,
      * in the prompt before the resize). This truncation of the prompt
      * is solving that problem.
      */
-    size_t rvlength = strlen(rv);
-    if (rvlength >= width) {
-        rv[width - 1] = 0;
-    }
+    // focus64
+    //size_t rvlength = strlen(rv);
+    //if (rvlength >= width) {
+    //    rv[width - 1] = 0;
+    //}
 
     return rv;
 }
@@ -206,6 +208,10 @@ struct scroller *scr_new(SWINDOW *win)
     rv->hlregex = NULL;
     rv->search_r = 0;
 
+    // focus64
+    rv->anchor = -1;
+    rv->scrolling = 0;
+
     /* Start with a single (blank) line */
     rv->lines = NULL;
     scroller_addline(rv, strdup(""), NULL);
@@ -246,7 +252,7 @@ static int get_last_col(struct scroller *scr, int row) {
     return (MAX(scr->lines[row].line_len - 1, 0) / width) * width;
 }
 
-static void scr_scroll_lines(struct scroller *scr,
+static int scr_scroll_lines(struct scroller *scr,
     int *r, int *c, int nlines)
 {
     int i;
@@ -275,6 +281,7 @@ static void scr_scroll_lines(struct scroller *scr,
         *r = row;
         *c = col;
     }
+    return i; // focus64: number of lines scrolled
 }
 
 void scr_up(struct scroller *scr, int nlines)
@@ -369,7 +376,9 @@ void scr_move(struct scroller *scr, SWINDOW *win)
 }
 
 void scr_clear(struct scroller *scr) {
-    scr->lines_to_display = 0;
+    //scr->lines_to_display = 0;
+    //focus64
+    scr->lines_to_display = swin_getmaxy(scr->win)/2;
 }
 
 static int wrap_line(struct scroller *scr, int line)
@@ -424,7 +433,8 @@ int scr_search_regex(struct scroller *scr, const char *regex, int opt,
                 if (opt == 2) {
                     scr->search_r = line;
 
-                    hl_regex_free(&scr->hlregex);
+		    // focus64
+                    //hl_regex_free(&scr->hlregex);
                     scr->last_hlregex = scr->hlregex;
                     scr->hlregex = 0;
                 }
@@ -585,6 +595,8 @@ void scr_refresh(struct scroller *scr, int focus, enum win_refresh dorefresh)
     height = swin_getmaxy(scr->win);
     width = swin_getmaxx(scr->win);
 
+    if (-1 == scr->anchor) scr->anchor = height;
+
     if (scr->current.c > 0) {
         if (scr->current.c % width != 0)
             scr->current.c = (scr->current.c / width) * width;
@@ -595,6 +607,17 @@ void scr_refresh(struct scroller *scr, int focus, enum win_refresh dorefresh)
 
     rows_to_display = number_rows_to_display(scr, height, width);
 
+    //focus64: try to keep the search highlight to the middle of window
+    //not to the bottom
+    if(scr->in_scroll_mode || scr->in_search_mode) {
+       int more_lines; // more lines to show/fill below the current row 
+       if(scr->scrolling) {
+           more_lines = height - scr->anchor; 
+       } else {
+           more_lines = height - height / 2;
+       }
+       scr->anchor = height - scr_scroll_lines(scr, &r, &c, more_lines);
+    }
     /**
      * Printing the scroller to the gdb window.
      *
@@ -638,9 +661,13 @@ void scr_refresh(struct scroller *scr, int focus, enum win_refresh dorefresh)
                 }
             }
 
-            if (scr->hlregex && scr->current.r == r) {
+	    // focus64
+            //if (scr->hlregex && scr->current.r == r) {
+            if ((scr->hlregex || scr->last_hlregex) && scr->current.r == r) {
                 struct hl_line_attr *attrs = hl_regex_highlight(
-                    &scr->hlregex, sline->line, HLG_INCSEARCH);
+                    //&scr->hlregex, 
+                    scr->hlregex ? &scr->hlregex : &scr->last_hlregex, 
+		    sline->line, HLG_INCSEARCH);
 
                 if (sbcount(attrs)) {
                     hl_printline_highlight(scr->win, sline->line,
