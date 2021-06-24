@@ -951,6 +951,7 @@ static int gdb_input(int key, int *last_key)
         switch (key) {
             case CGDB_KEY_PPAGE:
                 scr_up(gdb_scroller, get_gdb_height() - 1);
+                gdb_scroller->scrolling = 1;
                 break;
             case CGDB_KEY_CTRL_L:
                 scr_clear(gdb_scroller);
@@ -970,6 +971,8 @@ static int gdb_input(int key, int *last_key)
     }
 
     if_draw();
+
+    gdb_scroller->scrolling = 0;
 
     return result;
 }
